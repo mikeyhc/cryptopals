@@ -1,7 +1,8 @@
 -module(cryptopals_bytes).
 
--export([new_hex/1, hex_decode/1]).
+-export([new_hex/1, hex_encode/1, hex_decode/1]).
 -export([new_base64/1, base64_encode/1]).
+-export([fixed_xor/2]).
 -export_type([hex/0, base64/0]).
 
 -opaque hex() :: {hex, binary()}.
@@ -13,6 +14,10 @@ new_hex(Bytes) -> {hex, Bytes}.
 -spec new_base64(binary()) -> base64().
 new_base64(Bytes) -> {base64, Bytes}.
 
+-spec hex_encode(binary()) -> hex().
+hex_encode(Bytes) ->
+    {hex, hex_encode(Bytes, <<>>)}.
+
 -spec hex_decode(hex()) -> binary().
 hex_decode({hex, HexStr}) ->
     hex_decode(HexStr, <<>>).
@@ -21,7 +26,20 @@ hex_decode({hex, HexStr}) ->
 base64_encode(Bytes) ->
     {base64, base64_encode(Bytes, <<>>)}.
 
+-spec fixed_xor(binary(), binary()) -> binary().
+fixed_xor(B1, B2) ->
+    L1 = binary:bin_to_list(B1),
+    L2 = binary:bin_to_list(B2),
+    F = fun({X, Y}) -> X bxor Y end,
+    binary:list_to_bin(lists:map(F, lists:zip(L1, L2))).
+
 % helper functions
+
+hex_encode(<<>>, Acc) -> Acc;
+hex_encode(<<H, T/binary>>, Acc) ->
+    A = hexchar_encode(H bsr 4),
+    B = hexchar_encode(H band 16#f),
+    hex_encode(T, <<Acc/binary, A, B>>).
 
 hex_decode(<<>>, Acc) -> Acc;
 hex_decode(<<HA, HB, Rest/binary>>, Acc) ->
@@ -48,6 +66,9 @@ base64_encode(<<W:6, X:6, Y:6, Z:6, Rest/binary>>, Acc) ->
     BZ = base64char_encode(Z),
     io:format("~s~n", [Acc]),
     base64_encode(Rest, <<Acc/binary, BW, BX, BY, BZ>>).
+
+hexchar_encode(X) when X < 10 -> X + $0;
+hexchar_encode(X) -> X - 10 + $a.
 
 hexchar_decode(X) when X >= $0 andalso X =< $9 -> X - $0;
 hexchar_decode(X) when X >= $A andalso X =< $F -> X - $A + 10;

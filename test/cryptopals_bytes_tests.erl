@@ -7,3 +7,15 @@ set1_challenge1_test() ->
     ?assertEqual(<<"I'm killing your brain like a poisonous mushroom">>, Bytes),
     ?assertEqual(cryptopals_bytes:new_base64(<<"SSdtIGtpbGxpbmcgeW91ciBicmFpbiBsaWtlIGEgcG9pc29ub3VzIG11c2hyb29t">>), Base64).
 
+set1_challenge2_test() ->
+    Input1 = cryptopals_bytes:hex_decode(cryptopals_bytes:new_hex(<<"1c0111001f010100061a024b53535009181c">>)),
+    Input2 = cryptopals_bytes:hex_decode(cryptopals_bytes:new_hex(<<"686974207468652062756c6c277320657965">>)),
+    Output = cryptopals_bytes:fixed_xor(Input1, Input2),
+    ?assertEqual(<<"the kid don't play">>, Output),
+    ?assertEqual(cryptopals_bytes:new_hex(<<"746865206b696420646f6e277420706c6179">>),
+                 cryptopals_bytes:hex_encode(Output)).
+
+set1_challenge3_test() ->
+    Input = cryptopals_bytes:hex_decode(cryptopals_bytes:new_hex(<<"1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736">>)),
+    Output = cryptopals_cipher:single_xor(Input),
+    ?assertEqual({88, <<"Cooking MC's like a pound of bacon">>}, Output).
