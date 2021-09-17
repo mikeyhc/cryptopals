@@ -38,3 +38,8 @@ set1_challenge5_test() ->
                "a282b2f20430a652e2c652a3124333a653e2b2027630c692b20283165286326302e27282f">>,
     Hex = cryptopals_bytes:hex_encode(cryptopals_cipher:repeating_key_xor(Key, Input)),
     ?assertEqual(cryptopals_bytes:new_hex(Output), Hex).
+
+hamming_distance_test() ->
+    A = <<"this is a test">>,
+    B = <<"wokka wokka!!!">>,
+    ?assertEqual(37, cryptopals_bytes:hamming_distance(A, B)).

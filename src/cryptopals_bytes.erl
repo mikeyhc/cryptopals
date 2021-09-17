@@ -2,7 +2,7 @@
 
 -export([new_hex/1, hex_encode/1, hex_decode/1]).
 -export([new_base64/1, base64_encode/1]).
--export([fixed_xor/2]).
+-export([fixed_xor/2, hamming_distance/2]).
 -export_type([hex/0, base64/0]).
 
 -opaque hex() :: {hex, binary()}.
@@ -32,6 +32,13 @@ fixed_xor(B1, B2) ->
     L2 = binary:bin_to_list(B2),
     F = fun({X, Y}) -> X bxor Y end,
     binary:list_to_bin(lists:map(F, lists:zip(L1, L2))).
+
+-spec hamming_distance(binary(), binary()) -> non_neg_integer().
+hamming_distance(A, B) ->
+    lists:foldl(fun({X, Y}, Acc) when X =/= Y -> Acc + count_bits(X bxor Y);
+                   (_, Acc) -> Acc
+                end, 0, lists:zip(binary:bin_to_list(A),
+                                  binary:bin_to_list(B))).
 
 % helper functions
 
@@ -79,3 +86,10 @@ base64char_encode(X) when X >= 26 andalso X < 52 -> X - 26 + $a;
 base64char_encode(X) when X >= 52 andalso X < 62 -> X - 52 + $0;
 base64char_encode(62) -> $+;
 base64char_encode(63) -> $/.
+
+count_bits(0) -> 0;
+count_bits(X) ->
+    case X band 2#1 of
+        1 -> 1 + count_bits(X bsr 1);
+        0 -> count_bits(X bsr 1)
+    end.
