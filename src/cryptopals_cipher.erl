@@ -31,7 +31,11 @@ find_xor_string([H|T]) ->
     {Bit, Text}.
 
 -spec repeating_key_xor(binary(), binary()) -> binary().
-repeating_key_xor(_Key, Input) -> Input.
+repeating_key_xor(Key, Input) ->
+    Cipher = generate_key_cipher(Key, size(Input)),
+    F = fun({A, B}, Acc) -> <<Acc/binary, (A bxor B)>> end,
+    lists:foldl(F, <<>>, lists:zip(binary:bin_to_list(Input),
+                                   binary:bin_to_list(Cipher))).
 
 determine_best_byte(Bytes) ->
     Len = size(Bytes),
@@ -57,3 +61,11 @@ score_text(<<>>, _CharTable, Score) -> Score;
 score_text(<<X, T/binary>>, CharTable, Score) ->
     V = maps:get(X, CharTable, 0),
     score_text(T, CharTable, Score + V).
+
+generate_key_cipher(Key, Len) ->
+    Size = size(Key),
+    Count = Len div Size,
+    Rem = Len rem Size,
+    Partial = lists:duplicate(Count, Key),
+    Full = Partial ++ [binary:part(Key, 0, Rem)],
+    lists:foldl(fun(A, B) -> <<B/binary, A/binary>> end, <<>>, Full).
