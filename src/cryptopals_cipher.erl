@@ -1,6 +1,6 @@
 -module(cryptopals_cipher).
 
--export([single_xor/1]).
+-export([single_xor/1, find_xor_string/1, repeating_key_xor/2]).
 
 char_scores() ->
     #{$a =>  8.5, $b =>  2.1, $c =>  4.5, $d =>  3.4,
@@ -11,7 +11,29 @@ char_scores() ->
       $u =>  3.6, $v =>  1.0, $w =>  1.3, $x =>  0.3,
       $y =>  1.8, $z =>  0.3}.
 
+-spec single_xor(binary()) -> {byte(), binary()}.
 single_xor(Bytes) ->
+    {Bit, Text, _Score} = determine_best_byte(Bytes),
+    {Bit, Text}.
+
+-spec find_xor_string([binary()]) -> {byte(), binary()}.
+find_xor_string([H|T]) ->
+    F = fun({_, _, NewScore}=New, {_,_, OldScore}=Old) ->
+                if NewScore > OldScore -> New;
+                   true -> Old
+                end
+        end,
+    {Bit, Text, _} = lists:foldl(
+                       F,
+                       determine_best_byte(H),
+                       lists:map(fun determine_best_byte/1, T)
+                      ),
+    {Bit, Text}.
+
+-spec repeating_key_xor(binary(), binary()) -> binary().
+repeating_key_xor(_Key, Input) -> Input.
+
+determine_best_byte(Bytes) ->
     Len = size(Bytes),
     XorChar = fun(C) ->
                 BitStr = binary:list_to_bin(lists:duplicate(Len, C)),
@@ -25,8 +47,7 @@ single_xor(Bytes) ->
                    true -> Old
                 end
         end,
-    {Bit, Text, _Score} = lists:foldl(F, XorChar(0), lists:seq(16#1, 16#ff)),
-    {Bit, Text}.
+    lists:foldl(F, XorChar(0), lists:seq(16#1, 16#ff)).
 
 score_text(T) ->
     CharTable = char_scores(),

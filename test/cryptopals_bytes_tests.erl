@@ -19,3 +19,22 @@ set1_challenge3_test() ->
     Input = cryptopals_bytes:hex_decode(cryptopals_bytes:new_hex(<<"1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736">>)),
     Output = cryptopals_cipher:single_xor(Input),
     ?assertEqual({88, <<"Cooking MC's like a pound of bacon">>}, Output).
+
+set1_challenge4_test() ->
+    {ok, Contents} = file:read_file(code:priv_dir(cryptopals) ++ "/s1c4.txt"),
+    F = fun(B) ->
+                Hex = cryptopals_bytes:new_hex(B),
+                cryptopals_bytes:hex_decode(Hex)
+        end,
+    Lines = lists:map(F, binary:split(Contents, <<"\n">>, [global])),
+    Output = cryptopals_cipher:find_xor_string(Lines),
+    ?assertEqual({53,<<"Now that the party is jumping\n">>}, Output).
+
+set1_challenge5_test() ->
+    Input = <<"Burning 'em, if you ain't quick and nimble\n"
+              "I go crazy when I hear a cymbal">>,
+    Key = <<"ICE">>,
+    Output = <<"0b3637272a2b2e63622c2e69692a23693a2a3c6324202d623d63343c2a26226324272765272"
+               "a282b2f20430a652e2c652a3124333a653e2b2027630c692b20283165286326302e27282f">>,
+    Hex = cryptopals_bytes:hex_encode(cryptopals_cipher:repeating_key_xor(Key, Input)),
+    ?assertEqual(cryptopals_bytes:new_hex(Output), Hex).
