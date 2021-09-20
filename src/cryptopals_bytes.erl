@@ -1,7 +1,7 @@
 -module(cryptopals_bytes).
 
 -export([new_hex/1, hex_encode/1, hex_decode/1]).
--export([new_base64/1, base64_encode/1]).
+-export([new_base64/1, base64_encode/1, base64_decode/1]).
 -export([fixed_xor/2, hamming_distance/2]).
 -export_type([hex/0, base64/0]).
 
@@ -25,6 +25,10 @@ hex_decode({hex, HexStr}) ->
 -spec base64_encode(binary()) -> base64().
 base64_encode(Bytes) ->
     {base64, base64_encode(Bytes, <<>>)}.
+
+-spec base64_decode(base64()) -> binary().
+base64_decode({base64, Bytes}) ->
+    base64_decode(Bytes, <<>>).
 
 -spec fixed_xor(binary(), binary()) -> binary().
 fixed_xor(B1, B2) ->
@@ -58,21 +62,41 @@ base64_encode(<<>>, Acc) -> Acc;
 base64_encode(<<W:6, X:2>>, Acc) ->
     BW = base64char_encode(W),
     BX = base64char_encode(X bsl 4),
-    io:format("~s~n", [Acc]),
     <<Acc/binary, BW, BX, "==">>;
 base64_encode(<<W:6, X:6, Y:4>>, Acc) ->
     BW = base64char_encode(W),
     BX = base64char_encode(X),
     BY = base64char_encode(Y bsl 2),
-    io:format("~s~n", [Acc]),
     <<Acc/binary, BW, BX, BY, "=">>;
 base64_encode(<<W:6, X:6, Y:6, Z:6, Rest/binary>>, Acc) ->
     BW = base64char_encode(W),
     BX = base64char_encode(X),
     BY = base64char_encode(Y),
     BZ = base64char_encode(Z),
-    io:format("~s~n", [Acc]),
     base64_encode(Rest, <<Acc/binary, BW, BX, BY, BZ>>).
+
+base64_decode(<<>>, Acc) -> Acc;
+base64_decode(<<Y:8, Z:8, $=, $=>>, Acc) ->
+    A = base64char_decode(Y),
+    B = base64char_decode(Z),
+    <<Acc/binary, ((A bsl 2) bor ((B band 2#00110000) bsr 4))>>;
+base64_decode(<<X:8, Y:8, Z:8, $=>>, Acc) ->
+    A = base64char_decode(X),
+    B = base64char_decode(Y),
+    C = base64char_decode(Z),
+    <<Acc/binary,
+      ((A bsl 2) bor (B bsr 4)),
+      ((B bsl 4) bor (C bsr 2))>>;
+base64_decode(<<W:8, X:8, Y:8, Z:8, Rest/binary>>, Acc) ->
+    A = base64char_decode(W),
+    B = base64char_decode(X),
+    C = base64char_decode(Y),
+    D = base64char_decode(Z),
+    base64_decode(Rest,
+                  <<Acc/binary,
+                    ((A bsl 2) bor (B bsr 4)),
+                    ((B bsl 4) bor (C bsr 2)),
+                    ((C bsl 6) bor D)>>).
 
 hexchar_encode(X) when X < 10 -> X + $0;
 hexchar_encode(X) -> X - 10 + $a.
@@ -86,6 +110,12 @@ base64char_encode(X) when X >= 26 andalso X < 52 -> X - 26 + $a;
 base64char_encode(X) when X >= 52 andalso X < 62 -> X - 52 + $0;
 base64char_encode(62) -> $+;
 base64char_encode(63) -> $/.
+
+base64char_decode(X) when X >= $A andalso X =< $Z -> X - $A;
+base64char_decode(X) when X >= $a andalso X =< $z -> X - $a + 26;
+base64char_decode(X) when X >= $0 andalso X =< $9 -> X - $0 + 52;
+base64char_decode($+) -> 62;
+base64char_decode($/) -> 63.
 
 count_bits(0) -> 0;
 count_bits(X) ->

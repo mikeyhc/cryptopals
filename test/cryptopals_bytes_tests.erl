@@ -43,3 +43,19 @@ hamming_distance_test() ->
     A = <<"this is a test">>,
     B = <<"wokka wokka!!!">>,
     ?assertEqual(37, cryptopals_bytes:hamming_distance(A, B)).
+
+base64_decode_test() ->
+    Decode = fun(B) ->
+                     cryptopals_bytes:base64_decode(
+                       cryptopals_bytes:new_base64(B))
+             end,
+    ?assertEqual(<<"Man">>, Decode(<<"TWFu">>)),
+    ?assertEqual(<<"Ma">>, Decode(<<"TWE=">>)),
+    ?assertEqual(<<"M">>, Decode(<<"TQ==">>)).
+
+set1_challenge6_test() ->
+    {ok, Contents} = file:read_file(code:priv_dir(cryptopals) ++ "/s1c6.txt"),
+    F = fun(B, Acc) -> <<Acc/binary, B/binary>> end,
+    Body = lists:foldl(F, <<>>, binary:split(Contents, <<"\n">>, [global])),
+    Input = cryptopals_bytes:base64_decode(cryptopals_bytes:new_base64(Body)),
+    ?assertEqual(false, Input).
