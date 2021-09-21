@@ -1,6 +1,7 @@
 -module(cryptopals_cipher).
 
--export([single_xor/1, find_xor_string/1, repeating_key_xor/2]).
+-export([single_xor/1, find_xor_string/1, repeating_key_xor/2,
+         break_repeating_xor/1]).
 
 char_scores() ->
     #{$a =>  8.5, $b =>  2.1, $c =>  4.5, $d =>  3.4,
@@ -37,6 +38,19 @@ repeating_key_xor(Key, Input) ->
     lists:foldl(F, <<>>, lists:zip(binary:bin_to_list(Input),
                                    binary:bin_to_list(Cipher))).
 
+-spec break_repeating_xor(binary()) -> {binary(), binary()}.
+break_repeating_xor(Input) ->
+    KeySize = guess_key_size(Input),
+    io:format("got keysize ~p~n", [KeySize]),
+    Blocks = to_blocks(Input, KeySize),
+    Transposed = transpose(Blocks),
+    KeyFun = fun(T, Acc) ->
+                     {Bit, _} = find_xor_string(T),
+                     <<Acc/binary, Bit>>
+             end,
+    Key = lists:foldl(KeyFun, <<>>, Transposed),
+    {Key, repeating_key_xor(Key, Input)}.
+
 determine_best_byte(Bytes) ->
     Len = size(Bytes),
     XorChar = fun(C) ->
@@ -69,3 +83,30 @@ generate_key_cipher(Key, Len) ->
     Partial = lists:duplicate(Count, Key),
     Full = Partial ++ [binary:part(Key, 0, Rem)],
     lists:foldl(fun(A, B) -> <<B/binary, A/binary>> end, <<>>, Full).
+
+guess_key_size(Input) ->
+    {Size, _} = lists:foldl(fun(Size, Old={_, OldScore}) ->
+                                    NewScore = score_size(Input, Size) / Size,
+                                    if NewScore < OldScore -> {Size, NewScore};
+                                       true -> Old
+                                    end
+                            end, {2, score_size(Input, 2)}, lists:seq(3, 40)),
+    Size.
+
+score_size(Input, Size) ->
+    A = binary:part(Input, 0, Size),
+    B = binary:part(Input, Size, Size),
+    cryptopals_bytes:hamming_distance(A, B).
+
+to_blocks(Input, Size) ->
+    to_blocks(binary_to_list(Input), Size, []).
+
+to_blocks([], _Size, Acc) -> lists:reverse(Acc);
+to_blocks(L, Size, Acc) when length(L) < Size ->
+    io:format("warning: odd key size~n"),
+    lists:reverse([list_to_binary(L)|Acc]);
+to_blocks(L, Size, Acc) ->
+    {X, Rest} = lists:split(Size, L),
+    to_blocks(Rest, Size, [list_to_binary(X)|Acc]).
+
+transpose(_Input) -> [].

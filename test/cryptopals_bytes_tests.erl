@@ -58,4 +58,5 @@ set1_challenge6_test() ->
     F = fun(B, Acc) -> <<Acc/binary, B/binary>> end,
     Body = lists:foldl(F, <<>>, binary:split(Contents, <<"\n">>, [global])),
     Input = cryptopals_bytes:base64_decode(cryptopals_bytes:new_base64(Body)),
-    ?assertEqual(false, Input).
+    {Key, Text} = cryptopals_cipher:break_repeating_xor(Input),
+    ?assertEqual(false, {Key, Text}).
