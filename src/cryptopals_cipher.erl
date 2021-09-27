@@ -1,7 +1,9 @@
 -module(cryptopals_cipher).
 
 -export([single_xor/1, find_xor_string/1, repeating_key_xor/2,
-         break_repeating_xor/1]).
+         find_xor_key/1]).
+
+-compile(export_all).
 
 char_scores() ->
     #{$a =>  8.5, $b =>  2.1, $c =>  4.5, $d =>  3.4,
@@ -38,18 +40,17 @@ repeating_key_xor(Key, Input) ->
     lists:foldl(F, <<>>, lists:zip(binary:bin_to_list(Input),
                                    binary:bin_to_list(Cipher))).
 
--spec break_repeating_xor(binary()) -> {binary(), binary()}.
-break_repeating_xor(Input) ->
+-spec find_xor_key(binary()) -> {binary(), binary()}.
+find_xor_key(Input) ->
     KeySize = guess_key_size(Input),
-    io:format("got keysize ~p~n", [KeySize]),
     Blocks = to_blocks(Input, KeySize),
     Transposed = transpose(Blocks),
+    TransposedBin = lists:map(fun list_to_binary/1, Transposed),
     KeyFun = fun(T, Acc) ->
-                     {Bit, _} = find_xor_string(T),
+                     {Bit, _} = single_xor(T),
                      <<Acc/binary, Bit>>
              end,
-    Key = lists:foldl(KeyFun, <<>>, Transposed),
-    {Key, repeating_key_xor(Key, Input)}.
+    lists:foldl(KeyFun, <<>>, TransposedBin).
 
 determine_best_byte(Bytes) ->
     Len = size(Bytes),
@@ -86,7 +87,7 @@ generate_key_cipher(Key, Len) ->
 
 guess_key_size(Input) ->
     {Size, _} = lists:foldl(fun(Size, Old={_, OldScore}) ->
-                                    NewScore = score_size(Input, Size) / Size,
+                                    NewScore = score_size(Input, Size),
                                     if NewScore < OldScore -> {Size, NewScore};
                                        true -> Old
                                     end
@@ -94,19 +95,42 @@ guess_key_size(Input) ->
     Size.
 
 score_size(Input, Size) ->
+    Sum = score_size(Input, Size, 0),
+    Count = (size(Input) div Size) - 1,
+    Sum / Count.
+
+score_size(Input, Size, Score) when size(Input) < Size * 2 ->
+    Score;
+score_size(Input, Size, Score) ->
     A = binary:part(Input, 0, Size),
     B = binary:part(Input, Size, Size),
-    cryptopals_bytes:hamming_distance(A, B).
+    Hamm = cryptopals_bytes:hamming_distance(A, B) / Size,
+    score_size(bin_drop(Input, Size), Size, Score + Hamm).
 
-to_blocks(Input, Size) ->
+bin_drop(B, 0) -> B;
+bin_drop(<<_:8, Rest/binary>>, N) ->
+    bin_drop(Rest, N - 1).
+
+to_blocks(Input, Size) when Size > 0->
     to_blocks(binary_to_list(Input), Size, []).
 
 to_blocks([], _Size, Acc) -> lists:reverse(Acc);
 to_blocks(L, Size, Acc) when length(L) < Size ->
-    io:format("warning: odd key size~n"),
-    lists:reverse([list_to_binary(L)|Acc]);
+    lists:reverse(Acc);
 to_blocks(L, Size, Acc) ->
     {X, Rest} = lists:split(Size, L),
-    to_blocks(Rest, Size, [list_to_binary(X)|Acc]).
+    to_blocks(Rest, Size, [X|Acc]).
 
-transpose(_Input) -> [].
+transpose(Input) -> transpose(Input, []).
+
+transpose([[]|_], Acc) -> lists:reverse(Acc);
+transpose(L, Acc) ->
+    {Head, Tails} = transpose_row(L),
+    transpose(Tails, [Head|Acc]).
+
+transpose_row(Row) ->
+    transpose_row(Row, {[], []}).
+
+transpose_row([], {Hs, Ts}) -> {lists:reverse(Hs), lists:reverse(Ts)};
+transpose_row([[H|T]|Rest], {Hs, Ts}) ->
+    transpose_row(Rest, {[H|Hs], [T|Ts]}).
