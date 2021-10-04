@@ -78,3 +78,22 @@ set1_challenge7_test() ->
                                     [{encrypt, false},
                                      {padding, pkcs_padding}]),
     ?assertEqual(Text, Output).
+
+set1_challenge8_test() ->
+    {ok, Contents} = file:read_file(code:priv_dir(cryptopals) ++ "/s1c8.txt"),
+    FilterF = fun(X) -> size(X) > 0 end,
+    MapF = fun(X) ->
+                   cryptopals_bytes:hex_decode(cryptopals_bytes:new_hex(X))
+           end,
+    Lines = lists:filter(FilterF, binary:split(Contents, <<"\n">>, [global])),
+    Bytes = lists:map(MapF, Lines),
+    Output = cryptopals_cipher:detect_aes_ecb(Bytes),
+    Expected = <<"d880619740a8a19b7840a8a31c810a3d08649af70dc06f4f",
+                 "d5d2d69c744cd283e2dd052f6b641dbf9d11b0348542bb57",
+                 "08649af70dc06f4fd5d2d69c744cd2839475c9dfdbc1d465",
+                 "97949d9c7e82bf5a08649af70dc06f4fd5d2d69c744cd283",
+                 "97a93eab8d6aecd566489154789a6b0308649af70dc06f4f",
+                 "d5d2d69c744cd283d403180c98c8f6db1f2a3f9c4040deb0",
+                 "ab51b29933f2c123c58386b06fba186a">>,
+    ?assertEqual(cryptopals_bytes:new_hex(Expected),
+                 cryptopals_bytes:hex_encode(Output)).

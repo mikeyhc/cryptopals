@@ -52,6 +52,34 @@ find_xor_key(Input) ->
              end,
     lists:foldl(KeyFun, <<>>, TransposedBin).
 
+-spec detect_aes_ecb([binary()]) -> binary().
+detect_aes_ecb([H|T]) ->
+    F = fun(X, Old={_, OldScore}) ->
+                NewScore= aes_score(X),
+                if NewScore < OldScore -> {X, NewScore};
+                   true -> Old
+                end
+        end,
+    {Text, _Score} = lists:foldl(F, {H, aes_score(H)}, T),
+    Text.
+
+aes_score(Text) ->
+    N = size(Text) div 16 - 1,
+    Runs = N * (N + 1) div 2 - 1,
+    aes_score_size(Text) / Runs.
+
+aes_score_size(Text) when size(Text) < 32 -> 0;
+aes_score_size(Text) ->
+    Head = binary:part(Text, 0, 16),
+    Rest = binary:part(Text, 16, size(Text) - 16),
+    block_score(Head, Rest) + aes_score_size(Rest).
+
+block_score(_Block, Text) when size(Text) < 16 -> 0;
+block_score(Block, Text) ->
+    Other = binary:part(Text, 0, 16),
+    Hamm = cryptopals_bytes:hamming_distance(Block, Other) / 16,
+    Hamm + block_score(Block, bin_drop(Text, 16)).
+
 determine_best_byte(Bytes) ->
     Len = size(Bytes),
     XorChar = fun(C) ->
@@ -96,7 +124,7 @@ guess_key_size(Input) ->
 
 score_size(Input, Size) ->
     Sum = score_size(Input, Size, 0),
-    Count = (size(Input) div Size) - 1,
+    Count = size(Input) div Size - 1,
     Sum / Count.
 
 score_size(Input, Size, Score) when size(Input) < Size * 2 ->
