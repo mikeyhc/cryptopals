@@ -14,7 +14,7 @@
 
 -spec pkcs7_padding(binary(), pos_integer()) -> binary().
 pkcs7_padding(Message, BlockSize) ->
-    PadLen = BlockSize - size(Message) rem BlockSize,
+    PadLen = (BlockSize - size(Message)) rem BlockSize,
     Pad = list_to_binary(lists:duplicate(PadLen, PadLen)),
     <<Message/binary, Pad/binary>>.
 
@@ -64,24 +64,34 @@ forward_sbox(Byte) ->
 aes_ecb_encrypt(KeySize, Key, _PlainText) when size(Key) =/= KeySize ->
     error({invalid_key, Key, KeySize});
 aes_ecb_encrypt(KeySize, Key, PlainText) ->
-    MatrixSize = KeySize / 4,
+    MatrixSize = KeySize div 4,
     KeyMatrix = block_matrix(MatrixSize, Key),
     TextMatricies = to_matricies(MatrixSize, pkcs7_padding(PlainText, KeySize)),
     FinalMatrix = run_aes(0, KeyMatrix, TextMatricies),
-    FinalMatrix.
+    from_matricies(FinalMatrix).
 
 to_matricies(Size, X) ->
     block_matrix(Size, X).
 
+from_matricies(Matricies) ->
+    [A, B, C, D] = Matricies,
+    <<A/binary, B/binary, C/binary, D/binary>>.
+
 run_aes(11, _Key, State) -> State;
-run_aes(0, Key, State0) ->
-    State1 = matrix_add(State0, Key),
-    run_aes(1, Key, State1);
 run_aes(N, Key0, State0) ->
+    {Key1, State1} = apply_aes(N, Key0, State0),
+    run_aes(N + 1, Key1, State1).
+
+apply_aes(0, Key, State) ->
+    {Key, matrix_add(Key, State)};
+apply_aes(10, Key0, State0) ->
+    Key1 = aes_roundkey(roundkey_const(10), Key0),
+    State1 = state_transform(State0, true),
+    {Key1, matrix_add(State1, Key1)};
+apply_aes(N, Key0, State0) ->
     Key1 = aes_roundkey(roundkey_const(N), Key0),
     State1 = state_transform(State0),
-    State2 = matrix_add(State1, Key1),
-    run_aes(N + 1, Key1, State2).
+    {Key1, matrix_add(State1, Key1)}.
 
 roundkey_const(10) -> 16#36;
 roundkey_const(9) -> 16#1B;
@@ -89,17 +99,26 @@ roundkey_const(N) when N > 0 andalso N < 9 ->
     1 bsl (N - 1).
 
 matrix_add(A, B) ->
-    Add = fun({X, Y}) -> X + Y end,
-    F = fun({X, Y}) -> lists:map(Add, lists:zip(X, Y)) end,
+    Add = fun({X, Y}) -> X bxor Y end,
+    F = fun({X, Y}) ->
+        LX = binary_to_list(X),
+        LY = binary_to_list(Y),
+        list_to_binary(lists:map(Add, lists:zip(LX, LY)))
+    end,
     lists:map(F, lists:zip(A, B)).
 
-state_transform(StateMatrix0) ->
+state_transform(StateMatrix) ->
+    state_transform(StateMatrix, false).
+
+state_transform(StateMatrix0, SkipMix) ->
     StateMatrix1 = lists:map(fun byte_substitution/1, StateMatrix0),
     TSM1 = transpose(StateMatrix1),
     TSM2 = lists:map(fun({Idx, L}) -> circular_left_shift(Idx, L) end,
                      lists:zip(lists:seq(0, 3), TSM1)),
     StateMatrix2 = transpose(TSM2),
-    mix_column(StateMatrix2).
+    if SkipMix -> StateMatrix2;
+       true -> mix_column(StateMatrix2)
+    end.
 
 transpose({[<<>>|_], L}) -> [L];
 transpose({Ts, L}) ->

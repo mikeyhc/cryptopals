@@ -66,5 +66,54 @@ apply_state_transform_test() ->
     Output = cryptopals_block:state_transform(Input),
     ?assertEqual(Expected, Output).
 
+first_round_test() ->
+    Expected = [<<16#58, 16#47, 16#08, 16#8B>>,
+                <<16#15, 16#B6, 16#1C, 16#BA>>,
+                <<16#59, 16#D4, 16#E2, 16#E8>>,
+                <<16#CD, 16#39, 16#DF, 16#CE>>],
+    Key0 = cryptopals_block:block_matrix(4, ?SIMPLE_KEY),
+    State0 = cryptopals_block:block_matrix(4, ?SIMPLE_PLAINTEXT),
+    {Key1, State1} = cryptopals_block:apply_aes(0, Key0, State0),
+    {_Key2, State2} = cryptopals_block:apply_aes(1, Key1, State1),
+    ?assertEqual(Expected, State2).
+
+all_rounds_test() ->
+    Expected = [<<"001f0e543c4e08596e221b0b4774311a">>,
+                <<"5847088b15b61cba59d4e2e8cd39dfce">>,
+                <<"43c6a9620e57c0c80908ebfe3df87f37">>,
+                <<"7876305470767d23993c375b4b3934f1">>,
+                <<"b1ca51ed08fc54e104b1c9d3e7b26c20">>,
+                <<"9b512068235f22f05d1cbd322f389156">>,
+                <<"149325778fa42be8c06024405e0f9275">>,
+                <<"53398e5d430693f84f0a3b95855257bd">>,
+                <<"66253c7470ce5aa8afd30f0aa3731354">>,
+                <<"09668b78a2d19a65f0fce6c47b3b3089">>,
+                <<"29c3505f571420f6402299b31a02d73a">>
+               ],
+    F = fun({I, E}, {K0, S0}) ->
+        {K1, S1} = cryptopals_block:apply_aes(I, K0, S0),
+        [A, B, C, D] = S1,
+        Bytes = <<A/binary, B/binary, C/binary, D/binary>>,
+        ?assertEqual({hex, E}, cryptopals_bytes:hex_encode(Bytes)),
+        {K1, S1}
+    end,
+    lists:foldl(F,
+                {cryptopals_block:block_matrix(4, ?SIMPLE_KEY),
+                 cryptopals_block:block_matrix(4, ?SIMPLE_PLAINTEXT)},
+                lists:zip(lists:seq(0, length(Expected) - 1), Expected)).
+
+end_to_end_test() ->
+    Expected = <<16#29, 16#C3, 16#50, 16#5F, 16#57, 16#14, 16#20, 16#F6,
+                 16#40, 16#22, 16#99, 16#B3, 16#1A, 16#02, 16#D7, 16#3A>>,
+    Output = cryptopals_block:aes(aes_128_ecb, encrypt, ?SIMPLE_KEY,
+                                  ?SIMPLE_PLAINTEXT),
+    hex_print(Output),
+    ?assertEqual(Expected, Output).
+
 matrix_binary([A, B, C, D]) ->
     <<A/binary, B/binary, C/binary, D/binary>>.
+
+hex_print(Bin) ->
+    lists:foreach(fun(X) -> io:format("~s ", [integer_to_list(X, 16)]) end,
+                  binary_to_list(Bin)),
+    io:format("~n").
