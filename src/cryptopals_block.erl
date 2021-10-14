@@ -3,9 +3,9 @@
 -export([pkcs7_padding/2, aes/4]).
 -export_type([aes_mode/0]).
 
-%-ifdef(TEST).
+-ifdef(TEST).
 -compile(export_all).
-%-endif.
+-endif.
 
 -type aes_mode() :: aes_128_ecb.
 -type aes_operation() :: encrypt | decrypt.
@@ -14,9 +14,13 @@
 
 -spec pkcs7_padding(binary(), pos_integer()) -> binary().
 pkcs7_padding(Message, BlockSize) ->
-    PadLen = (BlockSize - size(Message)) rem BlockSize,
-    Pad = list_to_binary(lists:duplicate(PadLen, PadLen)),
-    <<Message/binary, Pad/binary>>.
+    PadSize = size(Message) rem BlockSize,
+    if PadSize =:= 0 -> Message;
+       true ->
+           PadLen = BlockSize - PadSize,
+           Pad = list_to_binary(lists:duplicate(PadLen, PadLen)),
+           <<Message/binary, Pad/binary>>
+    end.
 
 -spec aes(aes_mode(), aes_operation(), binary(), binary()) -> binary().
 aes(aes_128_ecb, encrypt, Key, PlainText) ->
@@ -65,17 +69,25 @@ aes_ecb_encrypt(KeySize, Key, _PlainText) when size(Key) =/= KeySize ->
     error({invalid_key, Key, KeySize});
 aes_ecb_encrypt(KeySize, Key, PlainText) ->
     MatrixSize = KeySize div 4,
+    MatrixSize = 4, % TODO make this handle other sizes
     KeyMatrix = block_matrix(MatrixSize, Key),
     TextMatricies = to_matricies(MatrixSize, pkcs7_padding(PlainText, KeySize)),
     FinalMatrix = run_aes(0, KeyMatrix, TextMatricies),
     from_matricies(FinalMatrix).
 
-to_matricies(Size, X) ->
-    block_matrix(Size, X).
+to_matricies(Size, Input) when Size * Size =:= size(Input)->
+    [block_matrix(Size, Input)];
+to_matricies(Size, Input) ->
+    MatrixSize = Size * Size,
+    Head = binary:part(Input, 0, MatrixSize),
+    Tail = binary:part(Input, MatrixSize, size(Input) - MatrixSize),
+    [block_matrix(Size, Head)|to_matricies(Size, Tail)].
 
 from_matricies(Matricies) ->
-    [A, B, C, D] = Matricies,
-    <<A/binary, B/binary, C/binary, D/binary>>.
+    Unmatrix = fun([A, B, C, D], Acc) ->
+                       <<Acc/binary, A/binary, B/binary, C/binary, D/binary>>
+               end,
+    lists:foldl(Unmatrix, <<>>, Matricies).
 
 run_aes(11, _Key, State) -> State;
 run_aes(N, Key0, State0) ->
@@ -83,15 +95,15 @@ run_aes(N, Key0, State0) ->
     run_aes(N + 1, Key1, State1).
 
 apply_aes(0, Key, State) ->
-    {Key, matrix_add(Key, State)};
+    {Key, lists:map(fun(S) -> matrix_add(Key, S) end, State)};
 apply_aes(10, Key0, State0) ->
     Key1 = aes_roundkey(roundkey_const(10), Key0),
-    State1 = state_transform(State0, true),
-    {Key1, matrix_add(State1, Key1)};
+    State1 = lists:map(fun(S) -> state_transform(S, true) end, State0),
+    {Key1, lists:map(fun(S) -> matrix_add(S, Key1) end, State1)};
 apply_aes(N, Key0, State0) ->
     Key1 = aes_roundkey(roundkey_const(N), Key0),
-    State1 = state_transform(State0),
-    {Key1, matrix_add(State1, Key1)}.
+    State1 = lists:map(fun state_transform/1, State0),
+    {Key1, lists:map(fun(S) -> matrix_add(S, Key1) end, State1)}.
 
 roundkey_const(10) -> 16#36;
 roundkey_const(9) -> 16#1B;
@@ -154,28 +166,19 @@ mix_single_column(A) ->
         ],
     list_to_binary(R).
 
-matrix_print(M) ->
-    io:format("~n"),
-    F = fun(<<A, B, C, D>>) ->
-        io:format("~s ~s ~s ~s~n",
-                  [integer_to_list(A, 16),
-                   integer_to_list(B, 16),
-                   integer_to_list(C, 16),
-                   integer_to_list(D, 16)])
-        end,
-    lists:foreach(F, M).
-
 block_xor(A, B) ->
     F = fun({X, Y}) -> X bxor Y end,
     list_to_binary(lists:map(F, lists:zip(binary_to_list(A),
                                           binary_to_list(B)))).
 
 block_matrix(Size, Text) ->
-    block_matrix(Size, Text, []).
+    R = block_matrix(Size, Text, []),
+    Size = length(R),
+    R.
 
 block_matrix(Size, Text, Acc) when size(Text) =:= Size ->
     lists:reverse([Text|Acc]);
-block_matrix(Size, Text, Acc) ->
+block_matrix(Size, Text, Acc) when size(Text) > Size ->
     Head = binary:part(Text, 0, Size),
     Tail = binary:part(Text, Size, size(Text) - Size),
     block_matrix(Size, Tail, [Head|Acc]).
@@ -204,12 +207,3 @@ byte_substitution(<<A, B, C, D>>) ->
 add_round_constant(Const, <<A, B, C, D>>) ->
     CA = Const bxor A,
     <<CA, B, C, D>>.
-
-round_constant(N) ->
-    Constants = {16#01, 16#02, 16#04, 16#08, 16#10,
-                 16#20, 16#40, 16#80, 16#1B, 16#36},
-    element(N, Constants).
-
-apply_aes(KeyMatrix, TextMatrix) ->
-    F = fun({X, Y}) -> block_xor(X, Y) end,
-    lists:map(F, lists:zip(KeyMatrix, TextMatrix)).

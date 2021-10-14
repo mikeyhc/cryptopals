@@ -31,8 +31,7 @@ all_roundkey_test() ->
                 <<"28fddef86da4244accc0a4fe3b316f26">>],
     Constants = [16#01, 16#02, 16#04, 16#08, 16#10,
                  16#20, 16#40, 16#80, 16#1B, 16#36],
-    F = fun(In={Const, Expect}, Last) ->
-                io:format("~p~n", [In]),
+    F = fun({Const, Expect}, Last) ->
                 LastBytes = cryptopals_bytes:hex_decode(Last),
                 Matrix = cryptopals_block:block_matrix(4, LastBytes),
                 [A, B, C, D] = cryptopals_block:aes_roundkey(Const, Matrix),
@@ -72,10 +71,10 @@ first_round_test() ->
                 <<16#59, 16#D4, 16#E2, 16#E8>>,
                 <<16#CD, 16#39, 16#DF, 16#CE>>],
     Key0 = cryptopals_block:block_matrix(4, ?SIMPLE_KEY),
-    State0 = cryptopals_block:block_matrix(4, ?SIMPLE_PLAINTEXT),
+    State0 = [cryptopals_block:block_matrix(4, ?SIMPLE_PLAINTEXT)],
     {Key1, State1} = cryptopals_block:apply_aes(0, Key0, State0),
     {_Key2, State2} = cryptopals_block:apply_aes(1, Key1, State1),
-    ?assertEqual(Expected, State2).
+    ?assertEqual([Expected], State2).
 
 all_rounds_test() ->
     Expected = [<<"001f0e543c4e08596e221b0b4774311a">>,
@@ -92,14 +91,14 @@ all_rounds_test() ->
                ],
     F = fun({I, E}, {K0, S0}) ->
         {K1, S1} = cryptopals_block:apply_aes(I, K0, S0),
-        [A, B, C, D] = S1,
+        [[A, B, C, D]] = S1,
         Bytes = <<A/binary, B/binary, C/binary, D/binary>>,
         ?assertEqual({hex, E}, cryptopals_bytes:hex_encode(Bytes)),
         {K1, S1}
     end,
     lists:foldl(F,
                 {cryptopals_block:block_matrix(4, ?SIMPLE_KEY),
-                 cryptopals_block:block_matrix(4, ?SIMPLE_PLAINTEXT)},
+                 [cryptopals_block:block_matrix(4, ?SIMPLE_PLAINTEXT)]},
                 lists:zip(lists:seq(0, length(Expected) - 1), Expected)).
 
 end_to_end_test() ->
@@ -107,13 +106,19 @@ end_to_end_test() ->
                  16#40, 16#22, 16#99, 16#B3, 16#1A, 16#02, 16#D7, 16#3A>>,
     Output = cryptopals_block:aes(aes_128_ecb, encrypt, ?SIMPLE_KEY,
                                   ?SIMPLE_PLAINTEXT),
-    hex_print(Output),
+    ?assertEqual(Expected, Output).
+
+full_text_test() ->
+    Key = <<"YELLOW SUBMARINE">>,
+    {ok, Input} = file:read_file(code:priv_dir(cryptopals) ++
+                                 "/s1c7-expected.txt"),
+    {ok, Contents} = file:read_file(code:priv_dir(cryptopals) ++ "/s1c7.txt"),
+    F = fun(B, Acc) -> <<Acc/binary, B/binary>> end,
+    Body = lists:foldl(F, <<>>, binary:split(Contents, <<"\n">>, [global])),
+    Expected = cryptopals_bytes:base64_decode(
+                 cryptopals_bytes:new_base64(Body)),
+    Output = cryptopals_block:aes(aes_128_ecb, encrypt, Key, Input),
     ?assertEqual(Expected, Output).
 
 matrix_binary([A, B, C, D]) ->
     <<A/binary, B/binary, C/binary, D/binary>>.
-
-hex_print(Bin) ->
-    lists:foreach(fun(X) -> io:format("~s ", [integer_to_list(X, 16)]) end,
-                  binary_to_list(Bin)),
-    io:format("~n").
