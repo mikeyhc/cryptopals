@@ -3,9 +3,9 @@
 -export([pkcs7_padding/2, aes/4]).
 -export_type([aes_mode/0]).
 
--ifdef(TEST).
+%-ifdef(TEST).
 -compile(export_all).
--endif.
+%-endif.
 
 -type aes_mode() :: aes_128_ecb.
 -type aes_operation() :: encrypt | decrypt.
@@ -70,9 +70,81 @@ aes_ecb_encrypt(KeySize, Key, PlainText) ->
     FinalMatrix = run_aes(0, KeyMatrix, TextMatricies),
     FinalMatrix.
 
-to_matricies(_Size, X) -> X.
+to_matricies(Size, X) ->
+    block_matrix(Size, X).
 
-run_aes(_Idx, _Key, Text) -> Text.
+run_aes(11, _Key, State) -> State;
+run_aes(0, Key, State0) ->
+    State1 = matrix_add(State0, Key),
+    run_aes(1, Key, State1);
+run_aes(N, Key0, State0) ->
+    Key1 = aes_roundkey(roundkey_const(N), Key0),
+    State1 = state_transform(State0),
+    State2 = matrix_add(State1, Key1),
+    run_aes(N + 1, Key1, State2).
+
+roundkey_const(10) -> 16#36;
+roundkey_const(9) -> 16#1B;
+roundkey_const(N) when N > 0 andalso N < 9 ->
+    1 bsl (N - 1).
+
+matrix_add(A, B) ->
+    Add = fun({X, Y}) -> X + Y end,
+    F = fun({X, Y}) -> lists:map(Add, lists:zip(X, Y)) end,
+    lists:map(F, lists:zip(A, B)).
+
+state_transform(StateMatrix0) ->
+    StateMatrix1 = lists:map(fun byte_substitution/1, StateMatrix0),
+    TSM1 = transpose(StateMatrix1),
+    TSM2 = lists:map(fun({Idx, L}) -> circular_left_shift(Idx, L) end,
+                     lists:zip(lists:seq(0, 3), TSM1)),
+    StateMatrix2 = transpose(TSM2),
+    mix_column(StateMatrix2).
+
+transpose({[<<>>|_], L}) -> [L];
+transpose({Ts, L}) ->
+    [L|transpose(transpose_col(Ts, [], <<>>))];
+transpose(L) ->
+    transpose(transpose_col(L, [], <<>>)).
+
+transpose_col([], Ts, Acc) -> {lists:reverse(Ts), Acc};
+transpose_col([<<H, T/binary>>|R], Ts, Acc) ->
+    transpose_col(R, [T|Ts], <<Acc/binary, H>>).
+
+circular_left_shift(N, In) ->
+    {A, B} = lists:split(N, binary_to_list(In)),
+    list_to_binary(B ++ A).
+
+
+mix_column(Input) ->
+    lists:map(fun mix_single_column/1, Input).
+
+mix_single_column(A) ->
+    LA = binary_to_list(A),
+    F = fun(X) -> ((X bsl 1) band 16#ff) bxor (((X bsr 7) band 1) * 16#1B) end,
+    LB = lists:map(F, LA),
+    Nth = fun lists:nth/2,
+    R = [Nth(1, LB) bxor Nth(4, LA) bxor Nth(3, LA) bxor Nth(2, LB) bxor
+         Nth(2, LA),
+         Nth(2, LB) bxor Nth(1, LA) bxor Nth(4, LA) bxor Nth(3, LB) bxor
+         Nth(3, LA),
+         Nth(3, LB) bxor Nth(2, LA) bxor Nth(1, LA) bxor Nth(4, LB) bxor
+         Nth(4, LA),
+         Nth(4, LB) bxor Nth(3, LA) bxor Nth(2, LA) bxor Nth(1, LB) bxor
+         Nth(1, LA)
+        ],
+    list_to_binary(R).
+
+matrix_print(M) ->
+    io:format("~n"),
+    F = fun(<<A, B, C, D>>) ->
+        io:format("~s ~s ~s ~s~n",
+                  [integer_to_list(A, 16),
+                   integer_to_list(B, 16),
+                   integer_to_list(C, 16),
+                   integer_to_list(D, 16)])
+        end,
+    lists:foreach(F, M).
 
 block_xor(A, B) ->
     F = fun({X, Y}) -> X bxor Y end,
@@ -88,6 +160,7 @@ block_matrix(Size, Text, Acc) ->
     Head = binary:part(Text, 0, Size),
     Tail = binary:part(Text, Size, size(Text) - Size),
     block_matrix(Size, Tail, [Head|Acc]).
+
 
 aes_roundkey(Const, [W0, W1, W2, W3]) ->
     ShiftW3 = circular_byte_left_shift(W3),

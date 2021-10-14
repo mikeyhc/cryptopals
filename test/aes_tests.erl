@@ -55,7 +55,16 @@ apply_aes_test() ->
     ?assertEqual(Expected0, Round0).
 
 apply_state_transform_test() ->
-    ok.
+    Expected = [<<16#BA, 16#75, 16#F4, 16#7A>>,
+                <<16#84, 16#A4, 16#8D, 16#32>>,
+                <<16#E8, 16#8D, 16#06, 16#0E>>,
+                <<16#1B, 16#40, 16#7D, 16#5D>>],
+    Input = [<<16#00, 16#1F, 16#0E, 16#54>>,
+             <<16#3C, 16#4E, 16#08, 16#59>>,
+             <<16#6E, 16#22, 16#1B, 16#0B>>,
+             <<16#47, 16#74, 16#31, 16#1A>>],
+    Output = cryptopals_block:state_transform(Input),
+    ?assertEqual(Expected, Output).
 
 matrix_binary([A, B, C, D]) ->
     <<A/binary, B/binary, C/binary, D/binary>>.
